@@ -6,6 +6,7 @@ from app.repositories.vehicle_repository import VehicleRepository
 from app.models.assurance import AssuranceDecision as AssuranceDecisionModel
 from app.algorithms.assurance_state_machine import AssuranceStateMachine
 from app.schemas.assurance import AssuranceEvaluationResponse
+from uuid import uuid4
 
 class AssuranceService:
     def __init__(self, session: AsyncSession):
@@ -31,7 +32,7 @@ class AssuranceService:
         )
 
         decision = AssuranceDecisionModel(
-            id=f"DEC-{vehicle_id}-{new_state}",
+            id=f"DEC-{vehicle_id}-{uuid4()}",
             vehicle_id=vehicle_id,
             previous_state=current_state,
             new_state=new_state,

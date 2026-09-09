@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { MetricCard } from "../components/common/MetricCard";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer } from "recharts";
-import { VehicleService } from "../services/api";
+import { AssuranceService, VehicleService } from "../services/api";
 import type { Vehicle } from "../types";
 
 export const DashboardPage = () => {
@@ -141,8 +141,9 @@ export const DashboardPage = () => {
             </p>
             <button 
               onClick={async () => {
-                await fetch('http://localhost:8000/api/v1/mitigation/RAVEN-017', { method: 'POST' });
-                window.alert('Graduated Mitigation REDUCE_NON_CRITICAL_WORKLOAD applied to RAVEN-017');
+                await AssuranceService.triggerMitigation('RAVEN-017');
+                const refreshed = await VehicleService.getVehicles();
+                setVehicles(refreshed);
               }}
               className="mt-space-sm w-full py-space-md bg-primary hover:bg-tertiary-container text-on-primary font-title-sm text-title-sm rounded-DEFAULT transition-colors flex items-center justify-center gap-space-xs"
             >

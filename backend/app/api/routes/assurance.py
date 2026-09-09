@@ -10,7 +10,13 @@ from app.algorithms.margin_engine import MarginEngine
 from app.repositories.vehicle_repository import VehicleRepository
 from app.repositories.envelope_repository import EnvelopeRepository
 from app.repositories.ota_repository import OTARepository
+from app.repositories.telemetry_repository import TelemetryRepository
+from app.services.assurance_service import AssuranceService
+from app.algorithms.trend_predictor import TrendPredictor
+from app.algorithms.response_orchestrator import ResponseOrchestrator
+from app.models.incident import Incident
 from app.core.exceptions import NotFoundError
+from uuid import uuid4
 
 router = APIRouter(prefix="/assurance", tags=["assurance"])
 
@@ -26,14 +32,15 @@ async def evaluate_margins(vehicle_id: str, db: AsyncSession = Depends(get_db)):
     if not vehicle.current_telemetry:
         return AssuranceEvaluationResponse(vehicleId=vehicle_id, margins=[], dominantStatus="NORMAL")
         
-    # Find active OTA for this vehicle
-    # In a full system, vehicle -> OTA -> Envelope mapping is stored in the DB.
-    # We will use the seeded OTA / Envelope for demonstration
+    # Resolve the envelope from the OTA campaign that supplied this software build.
+    ota = await OTARepository(db).get_for_software_version(vehicle.software_version)
+    if not ota:
+        raise NotFoundError("OTA update for vehicle software", vehicle.software_version)
+
     env_repo = EnvelopeRepository(db)
-    # The default envelope seeded is ENV-8821
-    envelope = await env_repo.get_by_id("ENV-8821")
+    envelope = await env_repo.get_by_artifact_ref(ota.verification_artifact_id)
     if not envelope:
-        raise NotFoundError("SafetyEnvelope", "ENV-8821")
+        raise NotFoundError("SafetyEnvelope for verification artifact", ota.verification_artifact_id)
         
     env_dict = {
         "maxCpuUtilization": envelope.max_cpu_utilization,
@@ -46,15 +53,46 @@ async def evaluate_margins(vehicle_id: str, db: AsyncSession = Depends(get_db)):
     
     # Save the margins back to the vehicle model
     vehicle.margins = margins
-    
-    # Determine dominant status (worst status among all constraints)
-    status_priority = {"NORMAL": 0, "WARNING": 1, "DEGRADED": 2, "UNSAFE": 3}
-    dominant_status = "NORMAL"
-    for m in margins:
-        if status_priority[m["status"]] > status_priority[dominant_status]:
-            dominant_status = m["status"]
-            
-    vehicle.assurance_state = dominant_status
+    worst_margin = min(margins, key=lambda margin: margin["marginPercent"])
+    vehicle.envelope_margin = worst_margin["marginPercent"]
+    vehicle.dominant_constraint = worst_margin["metric"]
+
+    samples = await TelemetryRepository(db).get_by_vehicle_id(vehicle_id, limit=10)
+    samples.sort(key=lambda sample: sample.timestamp)
+    prediction = None
+    if len(samples) >= 3:
+        history = [
+            {"timestamp": sample.timestamp.timestamp(), "value": sample.cpu_utilization}
+            for sample in samples
+        ]
+        prediction = TrendPredictor.predict(
+            history, samples[-1].cpu_utilization, envelope.max_cpu_utilization, "CPU Core Load"
+        )
+        vehicle.prediction = prediction
+
+    previous_state = vehicle.assurance_state
+    decision = await AssuranceService(db).process_assurance(vehicle_id)
+    dominant_status = decision.new_state if decision else previous_state
+    action = ResponseOrchestrator.determine_action(
+        dominant_status, vehicle.dominant_constraint, vehicle.envelope_margin, prediction
+    )
+    vehicle.active_mitigation = action
+
+    if dominant_status in {"DEGRADED", "UNSAFE"} and dominant_status != previous_state:
+        db.add(Incident(
+            id=f"INC-{uuid4()}",
+            vehicle_id=vehicle.id,
+            severity=dominant_status,
+            description=f"{vehicle.dominant_constraint} margin is {vehicle.envelope_margin:.1f}%",
+            mitigation_applied=action,
+            evidence_payload={
+                "otaVersion": ota.version,
+                "margins": margins,
+                "prediction": prediction,
+                "action": action,
+                "resolved": False,
+            },
+        ))
     
     return AssuranceEvaluationResponse(
         vehicleId=vehicle_id,

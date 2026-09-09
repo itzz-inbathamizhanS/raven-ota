@@ -10,6 +10,7 @@ export const FleetPage = () => {
   const [loading, setLoading] = useState(true);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string>("ALL");
+  const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,7 +21,13 @@ export const FleetPage = () => {
     });
   }, []);
 
-  const filteredVehicles = vehicles.filter(v => filterState === "ALL" || v.assuranceState === filterState);
+  const filteredVehicles = vehicles.filter((vehicle) => {
+    const matchesState = filterState === "ALL" || vehicle.assuranceState === filterState;
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [vehicle.id, vehicle.model, vehicle.softwareVersion]
+      .some((value) => value.toLowerCase().includes(query));
+    return matchesState && matchesSearch;
+  });
   const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId);
 
   return (
@@ -43,19 +50,19 @@ export const FleetPage = () => {
               SYNC INTERVAL: 100ms | HEURISTIC EVAL: FORMAL
             </span>
             <div className="flex gap-space-sm">
-              <button 
-                onClick={() => window.alert("Initiating batch envelope check across the fleet...")}
+              <button
+                onClick={() => setFilterState("ALL")}
                 className="px-space-md py-space-xs bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-title-sm text-title-sm rounded-DEFAULT border border-outline-variant flex items-center gap-space-xs"
               >
                 <span className="material-symbols-outlined text-[16px]">library_add_check</span>
-                Batch Envelope Check
+                Show Full Fleet
               </button>
-              <button 
-                onClick={() => window.alert("Exporting Fleet Audit as CSV...")}
+              <button
+                onClick={() => window.print()}
                 className="px-space-md py-space-xs bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-title-sm text-title-sm rounded-DEFAULT border border-outline-variant flex items-center gap-space-xs"
               >
                 <span className="material-symbols-outlined text-[16px]">download</span>
-                Export Fleet Audit
+                Print Fleet Audit
               </button>
             </div>
           </div>
@@ -75,6 +82,8 @@ export const FleetPage = () => {
             <span className="material-symbols-outlined absolute left-space-sm top-1/2 -translate-y-1/2 text-secondary text-[18px]">search</span>
             <input 
               type="text" 
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by Vehicle ID, VIN, or Software Version..." 
               className="w-full pl-10 pr-space-sm py-space-xs bg-surface border border-outline-variant rounded-DEFAULT font-body-sm text-body-sm focus:outline-none focus:border-primary"
             />

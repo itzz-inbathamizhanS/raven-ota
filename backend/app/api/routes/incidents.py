@@ -9,34 +9,28 @@ from app.core.exceptions import NotFoundError
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
+
+def to_response(incident) -> IncidentResponse:
+    evidence = incident.evidence_payload or {}
+    return IncidentResponse(
+        id=incident.id,
+        vehicleId=incident.vehicle_id,
+        timestamp=incident.timestamp.isoformat(),
+        severity=incident.severity,
+        otaVersion=evidence.get("otaVersion"),
+        constraintViolated=incident.description,
+        mitigationAction=incident.mitigation_applied,
+        resolved=bool(evidence.get("resolved", False)),
+    )
+
 @router.get("", response_model=list[IncidentResponse])
 async def get_all_incidents(db: AsyncSession = Depends(get_db)):
     repo = IncidentRepository(db)
     incidents = await repo.get_all()
-    return [
-        IncidentResponse(
-            id=i.id,
-            vehicleId=i.vehicle_id,
-            timestamp=i.timestamp.isoformat(),
-            severity=i.severity,
-            description=i.description,
-            mitigationApplied=i.mitigation_applied,
-            evidencePayload=i.evidence_payload
-        ) for i in incidents
-    ]
+    return [to_response(incident) for incident in incidents]
 
 @router.get("/{vehicle_id}", response_model=list[IncidentResponse])
 async def get_vehicle_incidents(vehicle_id: str, db: AsyncSession = Depends(get_db)):
     repo = IncidentRepository(db)
     incidents = await repo.get_by_vehicle_id(vehicle_id)
-    return [
-        IncidentResponse(
-            id=i.id,
-            vehicleId=i.vehicle_id,
-            timestamp=i.timestamp.isoformat(),
-            severity=i.severity,
-            description=i.description,
-            mitigationApplied=i.mitigation_applied,
-            evidencePayload=i.evidence_payload
-        ) for i in incidents
-    ]
+    return [to_response(incident) for incident in incidents]

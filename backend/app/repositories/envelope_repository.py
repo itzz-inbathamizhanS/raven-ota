@@ -12,6 +12,12 @@ class EnvelopeRepository:
         result = await self.session.execute(select(SafetyEnvelope).where(SafetyEnvelope.id == envelope_id))
         return result.scalars().first()
 
+    async def get_by_artifact_ref(self, artifact_ref: str) -> SafetyEnvelope | None:
+        result = await self.session.execute(
+            select(SafetyEnvelope).where(SafetyEnvelope.artifact_ref == artifact_ref)
+        )
+        return result.scalars().first()
+
     async def create(self, envelope: SafetyEnvelope) -> SafetyEnvelope:
         self.session.add(envelope)
         await self.session.flush()

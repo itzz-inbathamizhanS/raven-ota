@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .venv/
+backend/raven_ota.db
 __pycache__/
 *.pyc
 *.pyo

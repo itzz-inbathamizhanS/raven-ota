@@ -13,12 +13,12 @@ export const TopNav: React.FC = () => {
   };
 
   return (
-    <header className="fixed top-0 left-72 right-0 h-16 bg-surface/90 backdrop-blur-md z-30 flex items-center justify-between px-gutter-desktop shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <header className="fixed top-0 left-0 lg:left-72 right-0 h-16 bg-surface/90 backdrop-blur-md z-30 flex items-center justify-between px-gutter-mobile lg:px-gutter-desktop shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-space-base">
-        <span className="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+        <span className="hidden md:inline font-label-sm text-label-sm uppercase tracking-wider text-secondary">
           AUTONOMOUS VERIFICATION SYSTEM
         </span>
-        <span className="text-outline-variant">/</span>
+        <span className="hidden md:inline text-outline-variant">/</span>
         <div className="flex items-center gap-space-xs font-code-md text-code-md text-on-surface">
           <span className="material-symbols-outlined text-[16px] text-secondary">schedule</span>
           <span>UTC {formatTime(time)}</span>

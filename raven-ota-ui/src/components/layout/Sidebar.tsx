@@ -20,7 +20,7 @@ const NAV_ITEMS = [
 
 export const Sidebar: React.FC = () => {
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low z-40 flex flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low z-40 flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
       <div className="flex flex-col flex-1 min-h-0">
         <div className="p-space-lg flex flex-col gap-space-xs">
           <div className="flex items-center gap-space-sm">
@@ -68,7 +68,7 @@ export const Sidebar: React.FC = () => {
           </span>
         </div>
         <button 
-          onClick={() => window.alert('Global Engine Parameters dialog would open here.')}
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="w-full flex items-center justify-between px-space-md py-space-sm rounded-DEFAULT bg-surface-container-high text-on-surface hover:bg-surface transition-colors font-title-sm text-title-sm"
           type="button"
         >

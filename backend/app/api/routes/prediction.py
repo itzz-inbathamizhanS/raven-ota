@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.repositories.telemetry_repository import TelemetryRepository
 from app.repositories.vehicle_repository import VehicleRepository
 from app.repositories.envelope_repository import EnvelopeRepository
+from app.repositories.ota_repository import OTARepository
 from app.algorithms.trend_predictor import TrendPredictor
 from app.schemas.vehicle import Prediction
 from app.core.exceptions import NotFoundError
@@ -38,10 +39,11 @@ async def get_prediction(vehicle_id: str, db: AsyncSession = Depends(get_db)):
         for s in samples
     ]
     
-    env_repo = EnvelopeRepository(db)
-    # Hardcode ENV-8821 for demonstration, or retrieve from vehicle mapping
-    envelope = await env_repo.get_by_id("ENV-8821")
-    limit = envelope.max_cpu_utilization if envelope else 85.0
+    ota = await OTARepository(db).get_for_software_version(vehicle.software_version)
+    envelope = await EnvelopeRepository(db).get_by_artifact_ref(ota.verification_artifact_id) if ota else None
+    if not envelope:
+        raise NotFoundError("SafetyEnvelope for vehicle", vehicle_id)
+    limit = envelope.max_cpu_utilization
     
     pred_dict = TrendPredictor.predict(history, samples[-1].cpu_utilization, limit, "CPU")
     

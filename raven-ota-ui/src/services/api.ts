@@ -1,65 +1,62 @@
-import { MOCK_SCENARIOS, MOCK_EVIDENCE_RECORD } from "../data/mockData";
 import type { Vehicle, OTAUpdate, Incident, SimulationScenario, EvidenceRecord, VerificationArtifact, SafetyEnvelope } from "../types";
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, options);
+  if (!response.ok) throw new Error(`API request failed (${response.status})`);
+  return response.json() as Promise<T>;
+}
 
 export const VehicleService = {
   getVehicles: async (): Promise<Vehicle[]> => {
-    const res = await fetch(`${API_BASE_URL}/vehicles`);
-    return res.json();
+    try { return await request<Vehicle[]>("/vehicles"); } catch { return []; }
   },
   getVehicleById: async (id: string): Promise<Vehicle | undefined> => {
-    const res = await fetch(`${API_BASE_URL}/vehicles/${id}`);
-    if (!res.ok) return undefined;
-    return res.json();
+    try { return await request<Vehicle>(`/vehicles/${id}`); } catch { return undefined; }
   }
 };
 
 export const OTAService = {
   getCampaigns: async (): Promise<OTAUpdate[]> => {
-    const res = await fetch(`${API_BASE_URL}/ota`);
-    return res.json();
+    try { return await request<OTAUpdate[]>("/ota"); } catch { return []; }
   },
   getCampaignById: async (id: string): Promise<OTAUpdate | undefined> => {
-    const res = await fetch(`${API_BASE_URL}/ota/${id}`);
-    if (!res.ok) return undefined;
-    return res.json();
+    try { return await request<OTAUpdate>(`/ota/${id}`); } catch { return undefined; }
   },
   getVerificationArtifact: async (id: string): Promise<VerificationArtifact | undefined> => {
-    const res = await fetch(`${API_BASE_URL}/verification/${id}`);
-    if (!res.ok) return undefined;
-    return res.json();
+    try { return await request<VerificationArtifact>(`/verification/${id}`); } catch { return undefined; }
   },
   getSafetyEnvelope: async (id: string): Promise<SafetyEnvelope | undefined> => {
-    const res = await fetch(`${API_BASE_URL}/envelopes/${id}`);
-    if (!res.ok) return undefined;
-    return res.json();
+    try { return await request<SafetyEnvelope>(`/envelopes/${id}`); } catch { return undefined; }
   }
 };
 
 export const IncidentService = {
   getIncidents: async (): Promise<Incident[]> => {
-    const res = await fetch(`${API_BASE_URL}/incidents`);
-    return res.json();
+    try { return await request<Incident[]>("/incidents"); } catch { return []; }
   },
   getEvidenceRecord: async (incidentId: string): Promise<EvidenceRecord> => {
-    const res = await fetch(`${API_BASE_URL}/analytics/evidence/${incidentId}`);
-    if (!res.ok) return MOCK_EVIDENCE_RECORD;
-    return res.json();
+    return request<EvidenceRecord>(`/analytics/evidence/${incidentId}`);
   }
 };
 
 export const SimulatorService = {
   getScenarios: async (): Promise<SimulationScenario[]> => {
-    await delay(200);
-    return MOCK_SCENARIOS;
+    return request<SimulationScenario[]>("/simulator/scenarios");
   },
-  startSimulator: async (): Promise<void> => {
-    await fetch(`${API_BASE_URL}/simulator/start`, { method: "POST" });
+  startSimulator: async (scenarioId: string): Promise<void> => {
+    await request("/simulator/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenarioId }),
+    });
   },
   stopSimulator: async (): Promise<void> => {
-    await fetch(`${API_BASE_URL}/simulator/stop`, { method: "POST" });
+    await request("/simulator/stop", { method: "POST" });
   }
+};
+
+export const AssuranceService = {
+  triggerMitigation: (vehicleId: string) => request(`/mitigation/${vehicleId}`, { method: "POST" }),
 };

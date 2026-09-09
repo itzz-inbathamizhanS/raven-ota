@@ -20,11 +20,13 @@ class SimulatorService:
             cls._instance = super(SimulatorService, cls).__new__(cls)
             cls._instance.is_running = False
             cls._instance.task = None
+            cls._instance.scenario_id = "SCEN-01"
         return cls._instance
 
-    async def start(self):
+    async def start(self, scenario_id: str = "SCEN-01"):
         if self.is_running:
             return
+        self.scenario_id = scenario_id
         self.is_running = True
         self.task = asyncio.create_task(self._simulation_loop())
         logger.info("Simulator started.")
@@ -60,19 +62,24 @@ class SimulatorService:
             
             vehicles = await v_repo.get_all()
             for v in vehicles:
-                # 1. Mutate telemetry slightly based on its current context or state
-                # In a real simulator, this would be a physics or traffic model
+                # Deterministic scenario profiles make each run reproducible.
                 old_cpu = v.current_telemetry.get("cpuUtilization", 50.0)
-                
-                # Simulate a growing anomaly if it's "RAVEN-034"
-                if v.id == "RAVEN-034" and v.active_mitigation != "ROLLBACK":
-                    new_cpu = old_cpu + 1.5
-                elif v.active_mitigation in ["REDUCE_NON_CRITICAL_WORKLOAD", "ISOLATE_FUNCTION"]:
-                    # Mitigation reduces load
-                    new_cpu = max(20.0, old_cpu - 2.0)
-                else:
-                    import random
-                    new_cpu = max(0.0, min(100.0, old_cpu + random.uniform(-1.0, 1.0)))
+                deltas = {
+                    "SCEN-01": 0.0,
+                    "SCEN-02": 4.0,
+                    "SCEN-03": 2.0,
+                    "SCEN-04": 1.5,
+                    "SCEN-05": 2.5,
+                    "SCEN-06": 5.0,
+                    "SCEN-07": 6.0,
+                    "SCEN-08": -1.0,
+                    "SCEN-09": 8.0,
+                    "SCEN-10": 3.0,
+                }
+                delta = deltas.get(self.scenario_id, 0.0)
+                if v.active_mitigation in ["REDUCE_NON_CRITICAL_WORKLOAD", "ISOLATE_FUNCTION"]:
+                    delta = min(delta, -2.0)
+                new_cpu = max(20.0, min(100.0, old_cpu + delta))
                 
                 # Update current telemetry
                 current_telemetry = dict(v.current_telemetry)
@@ -91,13 +98,8 @@ class SimulatorService:
                 )
                 await t_repo.create(sample)
                 
-                # Run Assurance Evaluation
-                # This simulates the "Margin Engine" and "State Machine"
+                # Run the same assurance workflow used by the public API.
                 from app.api.routes.assurance import evaluate_margins
-                # In actual implementation we just call evaluate directly 
-                # but since we already have logic, we can call it.
-                # However we need the envelope. Since this is an MVP we can skip calling
-                # evaluate_margins API directly and use assurance_service or just commit telemetry.
-                # The frontend polls /assurance/evaluate/{id} to get state, OR we compute it here.
+                await evaluate_margins(v.id, session)
             
             await session.commit()

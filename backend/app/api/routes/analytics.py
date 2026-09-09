@@ -1,7 +1,14 @@
 """Analytics API routes (Baselines, Ablation, Fleet, Evidence)."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.session import get_db
+from app.repositories.vehicle_repository import VehicleRepository
+from app.repositories.incident_repository import IncidentRepository
+from app.core.exceptions import NotFoundError
+import hashlib
+import json
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -20,44 +27,56 @@ class AblationResult(BaseModel):
     verdict: str
 
 @router.get("/baselines", response_model=list[BaselineData])
-async def get_baselines():
-    # Return mock baseline data that frontend expects
+async def get_baselines(db: AsyncSession = Depends(get_db)):
+    """Return live fleet telemetry in the chart shape used by the dashboard."""
+    vehicles = await VehicleRepository(db).get_all()
     return [
-        {"timestamp": "00:00", "cpu": 45, "memory": 55, "latency": 12, "boundary": 85},
-        {"timestamp": "00:05", "cpu": 52, "memory": 58, "latency": 14, "boundary": 85},
-        {"timestamp": "00:10", "cpu": 48, "memory": 54, "latency": 11, "boundary": 85},
-        {"timestamp": "00:15", "cpu": 60, "memory": 62, "latency": 18, "boundary": 85},
-        {"timestamp": "00:20", "cpu": 65, "memory": 65, "latency": 22, "boundary": 85},
-        {"timestamp": "00:25", "cpu": 58, "memory": 60, "latency": 15, "boundary": 85},
-        {"timestamp": "00:30", "cpu": 50, "memory": 55, "latency": 12, "boundary": 85},
+        {
+            "timestamp": vehicle.id,
+            "cpu": vehicle.current_telemetry.get("cpuUtilization", 0),
+            "memory": 0,
+            "latency": vehicle.current_telemetry.get("taskJitter", 0),
+            "boundary": next((margin["threshold"] for margin in (vehicle.margins or []) if margin["metric"] == "CPU Core Load"), 0),
+        }
+        for vehicle in vehicles
     ]
 
 @router.get("/ablation", response_model=list[AblationResult])
-async def get_ablation_studies():
+async def get_ablation_studies(db: AsyncSession = Depends(get_db)):
+    vehicles = await VehicleRepository(db).get_all()
+    elevated = sum(vehicle.assurance_state in {"DEGRADED", "UNSAFE"} for vehicle in vehicles)
+    verdict = "Unsafe" if elevated else "Normal"
     return [
-        {"id": "ABL-01", "componentRemoved": "Formal Verification Pre-Check", "impactOnSafety": "Critical (3 unhandled edge cases)", "performanceDelta": "+15% Deploy Speed", "verdict": "Unsafe"},
-        {"id": "ABL-02", "componentRemoved": "Margin Engine (CPU)", "impactOnSafety": "High (Task starvation observed)", "performanceDelta": "+5% Throughput", "verdict": "Unsafe"},
-        {"id": "ABL-03", "componentRemoved": "Predictive Degradation", "impactOnSafety": "Medium (Delayed mitigation)", "performanceDelta": "-2% Overhead", "verdict": "Degraded"},
-        {"id": "ABL-04", "componentRemoved": "Context-Aware Workload Orchestrator", "impactOnSafety": "Medium (Suboptimal QoS)", "performanceDelta": "-5% Overhead", "verdict": "Degraded"},
+        {"id": "ABL-01", "componentRemoved": "Margin Engine", "impactOnSafety": f"{elevated} elevated vehicle(s) would be unclassified", "performanceDelta": "0%", "verdict": verdict},
+        {"id": "ABL-02", "componentRemoved": "Prediction", "impactOnSafety": "No proactive boundary estimate", "performanceDelta": "0%", "verdict": "Degraded"},
     ]
 
 @router.get("/fleet")
-async def get_fleet_summary():
-    return {
-        "totalVehicles": 15420,
-        "normal": 14200,
-        "warning": 850,
-        "degraded": 350,
-        "unsafe": 20
-    }
+async def get_fleet_summary(db: AsyncSession = Depends(get_db)):
+    vehicles = await VehicleRepository(db).get_all()
+    counts = {"NORMAL": 0, "WARNING": 0, "DEGRADED": 0, "UNSAFE": 0}
+    for vehicle in vehicles:
+        counts[vehicle.assurance_state] = counts.get(vehicle.assurance_state, 0) + 1
+    return {"totalVehicles": len(vehicles), **{key.lower(): value for key, value in counts.items()}}
 
 @router.get("/evidence/{incident_id}")
-async def get_evidence_chain(incident_id: str):
-    return {
-        "incidentId": incident_id,
-        "cryptographicHash": "a3b4c9e7f...82d1",
-        "timestamp": "2026-09-09T18:15:00Z",
-        "telemetrySnapshot": {"cpu": 95.2, "can": 88.1, "jitter": 3.2},
-        "formalContract": "ENV-8821",
-        "signatureValid": True
+async def get_evidence_chain(incident_id: str, db: AsyncSession = Depends(get_db)):
+    incident = await IncidentRepository(db).get_by_id(incident_id)
+    if not incident:
+        raise NotFoundError("Incident", incident_id)
+    evidence = incident.evidence_payload or {}
+    record = {
+        "incidentId": incident.id,
+        "vehicleId": incident.vehicle_id,
+        "timestamp": incident.timestamp.isoformat(),
+        "severity": incident.severity,
+        "constraint": incident.description,
+        "mitigation": incident.mitigation_applied,
+        "otaVersion": evidence.get("otaVersion"),
+        "margins": evidence.get("margins", []),
+        "prediction": evidence.get("prediction"),
     }
+    record["cryptographicHash"] = hashlib.sha256(
+        json.dumps(record, sort_keys=True, default=str, separators=(",", ":")).encode()
+    ).hexdigest()
+    return record

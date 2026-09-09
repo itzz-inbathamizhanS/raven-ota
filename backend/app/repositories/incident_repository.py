@@ -20,6 +20,10 @@ class IncidentRepository:
         )
         return list(result.scalars().all())
 
+    async def get_by_id(self, incident_id: str) -> Incident | None:
+        result = await self.session.execute(select(Incident).where(Incident.id == incident_id))
+        return result.scalars().first()
+
     async def create(self, incident: Incident) -> Incident:
         self.session.add(incident)
         await self.session.flush()

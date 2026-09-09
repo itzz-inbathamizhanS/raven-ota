@@ -8,10 +8,7 @@ export const SimulatorPage = () => {
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
 
   useEffect(() => {
-    SimulatorService.getScenarios().then(data => {
-      setScenarios(data);
-      setLoading(false);
-    });
+    SimulatorService.getScenarios().then(setScenarios).catch(() => setScenarios([])).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -52,7 +49,7 @@ export const SimulatorPage = () => {
                     await SimulatorService.stopSimulator();
                     setActiveScenario(null);
                   } else {
-                    await SimulatorService.startSimulator();
+                    await SimulatorService.startSimulator(scen.id);
                     setActiveScenario(scen.id);
                   }
                 }}
