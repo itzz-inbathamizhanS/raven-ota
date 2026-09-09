@@ -1,0 +1,24 @@
+# RAVEN-OTA Backend Tasks
+
+- `[/]` Phase 1: Foundation
+  - `[ ]` core/config.py
+  - `[ ]` core/logging.py
+  - `[ ]` core/exceptions.py
+  - `[ ]` db/base.py, session.py, init_db.py
+  - `[ ]` api/routes/health.py
+  - `[ ]` main.py
+  - `[ ]` requirements.txt, .env.example
+  - `[ ]` Verify: uvicorn starts, /health returns 200
+- `[ ]` Phase 2: Core Domain (Vehicle, OTA, Verification, Envelope)
+- `[ ]` Phase 3: Telemetry + Context + Margin Engine
+- `[ ]` Phase 4: Assurance State Machine
+- `[ ]` Phase 5: Prediction Engine
+- `[ ]` Phase 6: Graduated Response
+- `[ ]` Phase 7: Evidence + Incidents
+- `[ ]` Phase 8: Deterministic Simulator
+- `[ ]` Phase 9: Baselines
+- `[ ]` Phase 10: Ablation Study
+- `[ ]` Phase 11: Fleet Analytics
+- `[ ]` Phase 12: WebSocket
+- `[ ]` Phase 13: React Integration
+- `[ ]` Phase 14: Testing + Docker + Docs

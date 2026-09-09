@@ -1,0 +1,260 @@
+# RAVEN-OTA Backend Implementation Plan
+
+## Goal
+Build a complete FastAPI backend (14 phases) that powers the existing React frontend with deterministic runtime assurance logic — no LLM safety decisions, no hardcoded research results.
+
+## Existing Frontend Contract
+
+The frontend at `a:\RAVEN\raven-ota-ui` expects these data shapes (from [`src/types/index.ts`](file:///a:/RAVEN/raven-ota-ui/src/types/index.ts)):
+
+| Type | Key Fields |
+|------|-----------|
+| `Vehicle` | id, model, softwareVersion, assuranceState, envelopeMargin, dominantConstraint, context, currentTelemetry, margins[], prediction, activeMitigation |
+| `OTAUpdate` | id, version, releaseDate, type, status, rolloutPercentage, targetVehicles, verificationArtifactId |
+| `VerificationArtifact` | id, otaId, hashDigest, signatureValidity, asilLevel, formalInvariant |
+| `SafetyEnvelope` | id, artifactRef, maxCpuUtilization, maxCanBusLoad, maxTaskJitter, maxEcuTemp, temporalBoundaries |
+| `Incident` | id, timestamp, vehicleId, otaVersion, severity, constraintViolated, mitigationAction, resolved |
+| `EvidenceRecord` | incidentId, vehicleId, softwareVersion, verificationArtifact, safetyEnvelope, telemetry[], context, margins[], prediction, assuranceDecision, response, postResponseVerification, evidenceChain[] |
+| `SimulationScenario` | id, name, description, category |
+
+The backend API responses **must match these shapes** so the frontend works with minimal changes.
+
+---
+
+## Proposed Changes
+
+### Backend (`a:\RAVEN\backend\`)
+
+> [!IMPORTANT]
+> All 14 phases will be implemented sequentially. Each phase is tested before moving to the next.
+
+---
+
+#### Phase 1 — Foundation
+
+##### [NEW] `backend/app/main.py`
+FastAPI app with CORS, router mounting, lifespan startup (DB init).
+
+##### [NEW] `backend/app/core/config.py`
+Pydantic Settings: DATABASE_URL, CORS origins, API prefix, debug flag.
+
+##### [NEW] `backend/app/core/logging.py`
+Structured JSON logging via Python `logging`.
+
+##### [NEW] `backend/app/core/exceptions.py`
+Custom exception classes + FastAPI exception handlers.
+
+##### [NEW] `backend/app/db/base.py`
+SQLAlchemy declarative base, metadata.
+
+##### [NEW] `backend/app/db/session.py`
+Async-compatible session factory, `get_db` dependency.
+
+##### [NEW] `backend/app/db/init_db.py`
+`create_all` + seed function.
+
+##### [NEW] `backend/app/api/routes/health.py`
+`GET /api/v1/health` → `{"status": "healthy"}`
+
+##### [NEW] `backend/requirements.txt`
+##### [NEW] `backend/.env.example`
+
+**Verification**: `uvicorn app.main:app --reload` starts, `/api/v1/health` returns 200.
+
+---
+
+#### Phase 2 — Core Domain Models + CRUD
+
+##### [NEW] `backend/app/models/vehicle.py`
+SQLAlchemy Vehicle model.
+
+##### [NEW] `backend/app/models/ota.py`
+OTAUpdate model.
+
+##### [NEW] `backend/app/models/verification.py`
+VerificationArtifact model.
+
+##### [NEW] `backend/app/models/envelope.py`
+SafetyEnvelope model.
+
+##### [NEW] `backend/app/schemas/vehicle.py`, `ota.py`, `verification.py`, `envelope.py`
+Pydantic v2 schemas matching frontend types.
+
+##### [NEW] `backend/app/repositories/vehicle_repository.py`, `ota_repository.py`
+Data access layer.
+
+##### [NEW] `backend/app/services/vehicle_service.py`, `ota_service.py`, `verification_service.py`, `envelope_service.py`
+Business logic services.
+
+##### [NEW] `backend/app/api/routes/vehicles.py`, `ota.py`, `verification.py`, `envelopes.py`
+REST endpoints.
+
+##### [NEW] `backend/scripts/seed_demo_data.py`
+Seeds 5 vehicles (RAVEN-017/021/009/034/102) + OTA-2026-041 + verification + envelope.
+
+**Verification**: All CRUD endpoints return data matching frontend shapes.
+
+---
+
+#### Phase 3 — Telemetry + Context + Margin Engine
+
+##### [NEW] `backend/app/models/telemetry.py`, `context.py`
+##### [NEW] `backend/app/schemas/telemetry.py`, `context.py`, `assurance.py`
+##### [NEW] `backend/app/services/telemetry_service.py`, `context_service.py`
+##### [NEW] `backend/app/algorithms/margin_engine.py`
+
+Margin formula: `margin = (limit - observed) / limit`
+
+Severity classification:
+- `margin > 15%` → NORMAL
+- `5% < margin ≤ 15%` → NEAR_BOUNDARY (maps to WARNING)
+- `margin ≤ 5%` → VIOLATION (maps to DEGRADED/UNSAFE)
+
+##### [NEW] `backend/app/api/routes/telemetry.py`, `assurance.py`
+
+**Verification**: POST telemetry, GET margins, verify correct margin calculations.
+
+---
+
+#### Phase 4 — Assurance State Machine
+
+##### [NEW] `backend/app/algorithms/assurance_state_machine.py`
+
+Explicit deterministic FSM with states `{NORMAL, WARNING, DEGRADED, UNSAFE}`. Transitions based on margin severity, violation count, persistence, and context criticality. No LLM.
+
+##### [NEW] `backend/app/models/assurance.py`
+AssuranceDecision DB model.
+
+**Verification**: Unit tests for all state transitions.
+
+---
+
+#### Phase 5 — Prediction Engine
+
+##### [NEW] `backend/app/algorithms/trend_predictor.py`
+
+Rolling window linear regression on telemetry history. Calculates rate-of-change, time-to-threshold, confidence interval. Outputs `Prediction` objects.
+
+##### [NEW] `backend/app/services/prediction_service.py`
+##### [NEW] `backend/app/api/routes/prediction.py`
+
+**Verification**: Tests for stable/increasing/decreasing/boundary-approach/insufficient-data.
+
+---
+
+#### Phase 6 — Graduated Response
+
+##### [NEW] `backend/app/algorithms/response_policy.py`
+
+Deterministic response selection: state × margin × prediction × context → response tier.
+
+##### [NEW] `backend/app/services/response_service.py`
+Simulated mitigation (adjust telemetry values) + mandatory post-response verification.
+
+##### [NEW] `backend/app/models/response.py`
+
+**Verification**: Full pipeline test: telemetry → margin → prediction → state → response → post-verify.
+
+---
+
+#### Phase 7 — Evidence + Incidents
+
+##### [NEW] `backend/app/models/incident.py`, `evidence.py`
+##### [NEW] `backend/app/services/evidence_service.py`, `incident_service.py`
+##### [NEW] `backend/app/api/routes/incidents.py`, `evidence.py`
+
+Real SHA-256 hashing over evidence chain data. JSON export.
+
+**Verification**: Create incident, retrieve evidence chain, verify hash integrity.
+
+---
+
+#### Phase 8 — Deterministic Simulator
+
+##### [NEW] `backend/app/services/simulation_service.py`
+
+10 scenarios with deterministic seeds. Each scenario generates telemetry sequences, runs through the full RAVEN pipeline.
+
+##### [NEW] `backend/app/api/routes/simulation.py`
+
+**Verification**: Run each scenario, verify deterministic output.
+
+---
+
+#### Phase 9 — Baselines
+
+##### [NEW] `backend/app/algorithms/baseline_engine.py`
+
+4 baselines + RAVEN. Metrics calculated from actual scenario data.
+
+---
+
+#### Phase 10 — Ablation Study
+
+##### [NEW] `backend/app/algorithms/ablation_engine.py`
+
+5 variants (full, no-prediction, no-context, no-timing, no-envelope-link).
+
+---
+
+#### Phase 11 — Fleet Analytics
+
+##### [NEW] `backend/app/services/analytics_service.py`
+##### [NEW] `backend/app/api/routes/analytics.py`
+
+Aggregation queries over DB data. No hardcoded percentages.
+
+---
+
+#### Phase 12 — WebSocket
+
+##### [NEW] `backend/app/api/websocket.py`
+
+`WS /api/v1/ws/vehicles/{vehicle_id}` streaming telemetry/margin/prediction/state.
+
+---
+
+#### Phase 13 — React Integration
+
+##### [MODIFY] `raven-ota-ui/src/services/api.ts`
+Replace mock imports with `fetch()` calls to `VITE_API_BASE_URL`. Fallback to mock data on error.
+
+##### [NEW] `raven-ota-ui/.env`
+`VITE_API_BASE_URL=http://localhost:8000/api/v1`
+
+Minimal page changes only where needed for API consumption.
+
+---
+
+#### Phase 14 — Testing + Docker + Docs
+
+##### [NEW] `backend/app/tests/test_*.py` (11 test files)
+##### [NEW] `backend/Dockerfile`, `backend/docker-compose.yml`
+##### [NEW] `backend/README.md`
+
+End-to-end integration test for the 20-step acceptance chain.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- `pytest` after every phase
+- End-to-end 20-step acceptance test (Phase 14)
+- `npm run build` for frontend after Phase 13
+
+### Manual Verification
+- `GET /api/v1/health` responds
+- All 10 frontend routes load with live API data
+- Simulator scenarios produce deterministic results
+- Evidence chains contain real SHA-256 hashes
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Database choice**: The plan uses SQLite for development. Should I also configure PostgreSQL via Docker Compose, or is SQLite-only acceptable for now?
+
+> [!IMPORTANT]
+> **Authentication**: The spec says "authentication abstraction for future implementation." I will create a placeholder dependency (`get_current_user`) that returns a default user. Is that sufficient?

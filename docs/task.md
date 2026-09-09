@@ -1,0 +1,31 @@
+# RAVEN-OTA Migration Tasks
+
+- `[x]` Phase 1: Project Initialization & Tooling
+  - `[x]` Create Vite React + TypeScript project
+  - `[x]` Install Tailwind, Router, Lucide, Recharts
+  - `[x]` Configure `tailwind.config.ts` from `DESIGN.md`
+  - `[x]` Set up Google Fonts & Material Symbols in `index.html`
+- `[x]` Phase 2: Domain Types & Mock Services
+  - `[x]` Create TypeScript interfaces
+  - `[x]` Create mock data sets
+  - `[x]` Create service layer
+- `[/]` Phase 3: Global Application Shell
+  - `[ ]` Implement `TopNav`, `Sidebar`
+  - `[ ]` Implement `Layout`, `AppShell`, `Router`
+  - `[ ]` Implement basic shared components (Badge, Card, Button)
+- `[x]` Phase 4: Core Routes
+  - `[x]` `/` (Overview)
+  - `[x]` `/dashboard` (Operations Dashboard)
+  - `[x]` `/vehicles` (Vehicle Fleet)
+- `[x]` Phase 5: Detail & Monitoring Routes
+  - `[x]` `/vehicles/:id` (Vehicle Detail)
+  - `[x]` `/ota` (OTA Campaigns)
+  - `[x]` `/ota/:id` (OTA Detail)
+  - `[x]` `/assurance` (Assurance Monitor)
+- `[x]` Phase 6: Final Screens & Polish
+  - `[x]` `/incidents` (Incidents & Evidence)
+  - `[x]` `/analytics` (Fleet Analytics)
+  - `[x]` `/simulator` (Scenario Simulator)
+- `[ ]` Phase 7: Polish & Verification
+  - `[ ]` Run build and fix TS errors
+  - `[ ]` Validate responsive design and interactions

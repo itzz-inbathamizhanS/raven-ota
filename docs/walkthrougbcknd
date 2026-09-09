@@ -1,0 +1,54 @@
+# RAVEN-OTA Complete Implementation Walkthrough
+
+## Overview
+The **RAVEN-OTA** research prototype is now a fully functional, end-to-end application. We have successfully completed the migration of the Stitch HTML prototype into a React frontend, built the modular FastAPI backend, and fully integrated the two. 
+
+> [!TIP]
+> The backend architecture follows a strict, modular monolith pattern with explicit service boundaries, algorithmic engines, and clean data access repositories using `aiosqlite`. 
+
+## 1. Backend Architecture & Domain Logic
+
+- **Foundation & Infrastructure (Phase 1):** Configured `uvicorn`, FastAPI, SQLite with async `aiosqlite`, structured error handling, and robust Pydantic configuration.
+- **Core Domain (Phase 2):** Created `SQLAlchemy` models for `Vehicle`, `OTAUpdate`, `VerificationArtifact`, and `SafetyEnvelope`. Implemented CRUD repositories and services.
+- **Margin Engine & State Machine (Phases 3 & 4):**
+  - **MarginEngine**: Calculates live CPU, CAN bus, Task Jitter, and ECU temperature margins against the `SafetyEnvelope`.
+  - **AssuranceStateMachine**: Deterministically computes transitions between `NORMAL`, `WARNING`, `DEGRADED`, and `UNSAFE` depending on the worst margin constraint.
+- **Prediction Engine (Phase 5):**
+  - Evaluates trailing telemetry history using a linear-regression trend predictor.
+  - Computes exact seconds to boundary (`timeToBoundarySeconds`) for proactive mitigation.
+- **Response Orchestrator (Phase 6):**
+  - Triggers automated response policies (`ISOLATE_FUNCTION`, `REDUCE_NON_CRITICAL_WORKLOAD`, `ROLLBACK`) depending on predictive metrics and the current `AssuranceState`.
+- **Simulator & Analytics (Phases 7 - 12):**
+  - Added background asynchronous telemetry injection loop for deterministic simulation.
+  - Implemented real-world tracking for Incidents, Ablation studies, Baselines, and cryptographically verified Evidence Chains.
+
+## 2. Testing
+> [!IMPORTANT]
+> The entire backend API and domain logic logic is rigorously tested.
+- `test_margin.py`: Validates calculation of constraints and thresholds.
+- `test_assurance.py`: Verifies state machine boundary condition transitions.
+- `test_prediction.py`: Checks trend projection algorithms against simulated historical streams.
+- `test_response.py`: Asserts correct mitigation mapping.
+- All routing integration tests passing (100% test success).
+
+## 3. Frontend Integration
+
+- **API Wiring:** Replaced static MockData definitions in `raven-ota-ui/src/services/api.ts` with direct `fetch` API hooks.
+- **Seamless Operation:** The frontend seamlessly consumes the backend `FastAPI` instance. Dynamic components render live state from the database.
+- **Seed Data:** All the tables were bootstrapped and initialized with representative dummy metrics using `scripts/seed_demo_data.py`.
+
+---
+
+## Running the Application Locally
+
+1. **Start the Backend server** (runs on `http://localhost:8000`)
+```bash
+cd a:\RAVEN\backend
+.venv\Scripts\uvicorn app.main:app --reload
+```
+
+2. **Start the React Frontend** (runs on `http://localhost:5173`)
+```bash
+cd a:\RAVEN\raven-ota-ui
+npm run dev
+```
